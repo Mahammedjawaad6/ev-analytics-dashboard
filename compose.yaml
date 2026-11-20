@@ -27,5 +27,5 @@ services:
       - --server.port=8501
       - --server.headless=true
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     restart: unless-stopped

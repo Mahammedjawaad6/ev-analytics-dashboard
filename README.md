@@ -93,12 +93,37 @@ For local Streamlit development instead of Pages:
 docker compose up --build dashboard
 ```
 
-Open [http://localhost:8501](http://localhost:8501) and upload the CSV.
+The dashboard port is published on `127.0.0.1` only. Open
+[http://localhost:8501](http://localhost:8501) on the Docker host and upload the
+CSV. The Streamlit process listens on the container interface so Docker can
+forward the loopback-only host port; do not broaden the host binding unless you
+add an appropriate authenticated access layer.
+
+## Security
+
+- The static dashboard parses uploads in the browser and does not send files to
+  an application server. Avoid uploading data that should not be processed on
+  the current device.
+- The optional local Streamlit service is unauthenticated and is therefore
+  bound to host loopback only by Docker Compose.
+- The example CSV, project notebook, and generated outputs are excluded from
+  Git and Docker build contexts.
+- A regression test checks the loopback-only published port and the
+  source-data ignore rules:
+
+```powershell
+python -m pytest -v tests/test_compose_security.py
+docker compose config --format json
+```
+
+GitHub Pages and the GitHub repository are public. Do not commit credentials or
+confidential data, and do not place secrets in browser JavaScript.
 
 ## Tests
 
 ```powershell
 node --test tests/dashboard_frontend.test.mjs
+python -m pytest -v tests/test_compose_security.py
 docker compose build
 docker compose run --rm --entrypoint python ev-analytics -m pytest -v
 ```
