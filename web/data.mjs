@@ -127,3 +127,159 @@ export function getAnalytics(data) {
 
   return { globalByYearUnit, units, preferredUnit, countriesByYear, latestYear };
 }
+
+const FORECAST_HISTORY = 4;
+const MIN_FORECAST_HISTORY = 4;
+
+function fitLinearTrend(points) {
+  const history = points.slice(-FORECAST_HISTORY);
+  const meanYear =
+    history.reduce((total, point) => total + point.year, 0) / history.length;
+  const meanValue =
+    history.reduce((total, point) => total + point.value, 0) / history.length;
+  const yearVariance = history.reduce(
+    (total, point) => total + (point.year - meanYear) ** 2,
+    0,
+  );
+  const slope =
+    yearVariance === 0
+      ? 0
+      : history.reduce(
+          (total, point) =>
+            total + (point.year - meanYear) * (point.value - meanValue),
+          0,
+        ) / yearVariance;
+
+  return (year) => Math.max(0, meanValue + slope * (year - meanYear));
+}
+
+function scoreForecast(errors, actualTotal) {
+  if (!errors.length || actualTotal <= 0) return null;
+  const absoluteError = errors.reduce((total, error) => total + error, 0);
+  return absoluteError / actualTotal;
+}
+
+export function buildForecast(data, unit, horizon = 3) {
+  if (!Number.isInteger(horizon) || horizon < 1 || horizon > 3) {
+    throw new Error("Forecast horizon must be between 1 and 3 years.");
+  }
+
+  const stockByCountry = new Map();
+  for (const row of data) {
+    if (
+      row.category !== "Historical" ||
+      row.parameter !== "EV stock" ||
+      row.mode !== "Cars" ||
+      row.powertrain !== "EV" ||
+      row.aggregate_group !== "Other" ||
+      row.unit !== unit ||
+      !row.region_country
+    ) {
+      continue;
+    }
+
+    if (!stockByCountry.has(row.region_country)) {
+      stockByCountry.set(row.region_country, new Map());
+    }
+    const stockByYear = stockByCountry.get(row.region_country);
+    stockByYear.set(
+      row.year,
+      (stockByYear.get(row.year) || 0) + row.value,
+    );
+  }
+
+  const seriesByCountry = [...stockByCountry.entries()]
+    .map(([country, stockByYear]) => ({
+      country,
+      points: [...stockByYear.entries()]
+        .map(([year, value]) => ({ year, value }))
+        .sort((left, right) => left.year - right.year),
+    }))
+    .filter(({ points }) => points.length >= MIN_FORECAST_HISTORY);
+
+  if (!seriesByCountry.length) {
+    return {
+      modelName: "Not enough data",
+      modelWape: null,
+      baselineWape: null,
+      validationSamples: 0,
+      validationCountries: 0,
+      latestYear: null,
+      targetYear: null,
+      forecasts: [],
+    };
+  }
+
+  const latestYear = Math.max(
+    ...seriesByCountry.map(({ points }) => points[points.length - 1].year),
+  );
+  const currentSeries = seriesByCountry.filter(
+    ({ points }) => points[points.length - 1].year === latestYear,
+  );
+  const regressionErrors = [];
+  const baselineErrors = [];
+  let actualTotal = 0;
+  let validationCountries = 0;
+
+  for (const { points } of currentSeries) {
+    let hasValidation = false;
+    const firstValidationIndex = Math.max(3, points.length - 3);
+    for (
+      let targetIndex = firstValidationIndex;
+      targetIndex < points.length;
+      targetIndex += 1
+    ) {
+      const training = points.slice(0, targetIndex);
+      const actual = points[targetIndex];
+      const predict = fitLinearTrend(training);
+      regressionErrors.push(Math.abs(predict(actual.year) - actual.value));
+      baselineErrors.push(
+        Math.abs(training[training.length - 1].value - actual.value),
+      );
+      actualTotal += actual.value;
+      hasValidation = true;
+    }
+    if (hasValidation) validationCountries += 1;
+  }
+
+  const modelWape = scoreForecast(regressionErrors, actualTotal);
+  const baselineWape = scoreForecast(baselineErrors, actualTotal);
+  const useRegression =
+    modelWape !== null &&
+    (baselineWape === null || modelWape < baselineWape);
+  const forecasts = currentSeries.map(({ country, points }) => {
+    const current = points[points.length - 1];
+    const predict = fitLinearTrend(points);
+    const forecastValue = useRegression
+      ? predict(current.year + horizon)
+      : current.value;
+    return {
+      country,
+      currentYear: current.year,
+      currentValue: current.value,
+      forecastYear: current.year + horizon,
+      forecastValue,
+      changePct:
+        current.value > 0
+          ? ((forecastValue - current.value) / current.value) * 100
+          : null,
+    };
+  }).sort(
+    (left, right) =>
+      right.forecastValue - left.forecastValue ||
+      left.country.localeCompare(right.country),
+  );
+
+  return {
+    modelName: useRegression
+      ? "4-point linear regression"
+      : "Last-value baseline",
+    modelWape,
+    baselineWape,
+    validationSamples: regressionErrors.length,
+    validationCountries,
+    latestYear,
+    targetYear: latestYear + horizon,
+    forecasts,
+  };
+}

@@ -1,4 +1,4 @@
-import { getAnalytics, parseCsv } from "./data.mjs";
+import { buildForecast, getAnalytics, parseCsv } from "./data.mjs";
 
 const CHART_COLOR = "#5274df";
 const state = { data: null, analytics: null, hoveredPoint: -1 };
@@ -24,6 +24,16 @@ const elements = {
   chart: document.querySelector("#trend-chart"),
   chartEmpty: document.querySelector("#trend-empty"),
   chartTooltip: document.querySelector("#chart-tooltip"),
+  forecastHorizon: document.querySelector("#forecast-horizon"),
+  forecastCaption: document.querySelector("#forecast-caption"),
+  forecastModel: document.querySelector("#forecast-model"),
+  forecastCoverage: document.querySelector("#forecast-coverage"),
+  forecastWape: document.querySelector("#forecast-wape"),
+  forecastBenchmark: document.querySelector("#forecast-benchmark"),
+  forecastYear: document.querySelector("#forecast-year"),
+  forecastEmpty: document.querySelector("#forecast-empty"),
+  forecastTable: document.querySelector("#forecast-table"),
+  forecastRows: document.querySelector("#forecast-rows"),
   rankingCaption: document.querySelector("#ranking-caption"),
   search: document.querySelector("#country-search"),
   rankingEmpty: document.querySelector("#ranking-empty"),
@@ -247,6 +257,67 @@ function renderCountryRows() {
   if (!sorted.length) elements.rankingEmpty.textContent = "No matching countries found.";
 }
 
+function renderForecast() {
+  const horizon = Number(elements.forecastHorizon.value);
+  const forecast = buildForecast(state.data, elements.unit.value, horizon);
+  const hasForecasts = forecast.forecasts.length > 0;
+  const regressionWape =
+    forecast.modelWape === null ? null : `${(forecast.modelWape * 100).toFixed(1)}%`;
+  const baselineWape =
+    forecast.baselineWape === null
+      ? "not available"
+      : `${(forecast.baselineWape * 100).toFixed(1)}%`;
+  const selectedWape =
+    forecast.modelName === "4-point linear regression"
+      ? regressionWape
+      : baselineWape;
+
+  elements.forecastCaption.textContent =
+    `${horizon}-year country EV stock outlook · ${elements.unit.value}`;
+  elements.forecastModel.textContent = forecast.modelName;
+  elements.forecastCoverage.textContent = hasForecasts
+    ? `${forecast.forecasts.length} current country series · ${forecast.validationCountries} validated`
+    : "Need four historical observations per country.";
+  elements.forecastWape.textContent = selectedWape ?? "—";
+  elements.forecastBenchmark.textContent =
+    forecast.baselineWape === null
+      ? "Not enough held-out observations to score."
+      : `Regression ${regressionWape} · last-value ${baselineWape} · ${forecast.validationSamples} holdout predictions`;
+  elements.forecastYear.textContent = forecast.targetYear ?? "—";
+  elements.forecastEmpty.hidden = hasForecasts;
+  elements.forecastTable.hidden = !hasForecasts;
+  elements.forecastEmpty.textContent = hasForecasts
+    ? ""
+    : `No current ${elements.unit.value} country series has enough history to build a forecast.`;
+
+  elements.forecastRows.replaceChildren();
+  for (const [index, row] of forecast.forecasts.slice(0, 10).entries()) {
+    const tableRow = document.createElement("tr");
+    const rank = document.createElement("td");
+    rank.className = "rank-number";
+    rank.textContent = String(index + 1).padStart(2, "0");
+
+    const country = document.createElement("td");
+    country.textContent = row.country;
+
+    const current = document.createElement("td");
+    current.className = "stock-number";
+    current.textContent = formatMillions(row.currentValue);
+
+    const projected = document.createElement("td");
+    projected.className = "stock-number";
+    projected.textContent = formatMillions(row.forecastValue);
+
+    const change = document.createElement("td");
+    change.className = "forecast-change";
+    change.textContent =
+      row.changePct === null ? "—" : `${row.changePct >= 0 ? "+" : ""}${row.changePct.toFixed(1)}%`;
+
+    tableRow.append(rank, country, current, projected, change);
+    elements.forecastRows.append(tableRow);
+  }
+}
+
 function activateData(file, data) {
   state.data = data;
   state.analytics = getAnalytics(data);
@@ -265,11 +336,13 @@ function activateData(file, data) {
   }
   elements.unit.value = state.analytics.preferredUnit;
   elements.unit.disabled = false;
+  elements.forecastHorizon.disabled = false;
   elements.search.disabled = false;
   elements.chartEmpty.hidden = true;
   elements.rankingEmpty.textContent = "Upload a dataset to reveal the leading EV markets.";
 
   setMetrics();
+  renderForecast();
   renderCountryRows();
   drawChart();
 }
@@ -297,7 +370,11 @@ elements.file.addEventListener("change", (event) => {
 elements.unit.addEventListener("change", () => {
   if (!state.data) return;
   setMetrics();
+  renderForecast();
   drawChart();
+});
+elements.forecastHorizon.addEventListener("change", () => {
+  if (state.data) renderForecast();
 });
 elements.search.addEventListener("input", () => {
   if (state.analytics) renderCountryRows();

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { getAnalytics, parseCsv } from "../web/data.mjs";
+import { buildForecast, getAnalytics, parseCsv } from "../web/data.mjs";
 
 const HEADER =
   "\uFEFFregion_country,category,parameter,mode,powertrain,year,unit,value,Aggregate group";
@@ -61,5 +61,90 @@ test("aggregates historical global stock and ranks latest-year countries", () =>
       ["Beta", 40000000],
       ["Alpha", 20000000],
     ],
+  );
+});
+
+test("trains a country trend, validates it against persistence, and excludes projections", () => {
+  const data = Array.from({ length: 6 }, (_, index) => ({
+    region_country: "Alpha",
+    category: "Historical",
+    parameter: "EV stock",
+    mode: "Cars",
+    powertrain: "EV",
+    year: 2020 + index,
+    unit: "Vehicles",
+    value: 10 + index * 10,
+    aggregate_group: "Other",
+  }));
+  data.push({
+    ...data[5],
+    category: "Projection-STEPS",
+    year: 2030,
+    value: 10000,
+  });
+  data.push({
+    ...data[5],
+    unit: "vehicles",
+    year: 2025,
+    value: 50000,
+  });
+
+  const result = buildForecast(data, "Vehicles", 3);
+
+  assert.equal(result.modelName, "4-point linear regression");
+  assert.equal(result.validationSamples, 3);
+  assert.equal(result.validationCountries, 1);
+  assert.equal(result.modelWape, 0);
+  assert.ok(result.baselineWape > result.modelWape);
+  assert.equal(result.targetYear, 2028);
+  assert.deepEqual(result.forecasts[0], {
+    country: "Alpha",
+    currentYear: 2025,
+    currentValue: 60,
+    forecastYear: 2028,
+    forecastValue: 90,
+    changePct: 50,
+  });
+});
+
+test("uses the last-value baseline when regression loses its rolling backtest", () => {
+  const values = [601, 847, 245, 991, 871, 337];
+  const data = values.map((value, index) => ({
+    region_country: "Beta",
+    category: "Historical",
+    parameter: "EV stock",
+    mode: "Cars",
+    powertrain: "EV",
+    year: 2020 + index,
+    unit: "Vehicles",
+    value,
+    aggregate_group: "Other",
+  }));
+
+  const result = buildForecast(data, "Vehicles", 2);
+
+  assert.equal(result.modelName, "Last-value baseline");
+  assert.ok(result.modelWape > result.baselineWape);
+  assert.equal(result.forecasts[0].forecastValue, 337);
+  assert.equal(result.forecasts[0].forecastYear, 2027);
+});
+
+test("does not forecast short country series and rejects unsupported horizons", () => {
+  const data = Array.from({ length: 3 }, (_, index) => ({
+    region_country: "Gamma",
+    category: "Historical",
+    parameter: "EV stock",
+    mode: "Cars",
+    powertrain: "EV",
+    year: 2020 + index,
+    unit: "Vehicles",
+    value: 5 + index,
+    aggregate_group: "Other",
+  }));
+
+  assert.deepEqual(buildForecast(data, "Vehicles").forecasts, []);
+  assert.throws(
+    () => buildForecast(data, "Vehicles", 4),
+    /between 1 and 3 years/,
   );
 });

@@ -293,6 +293,24 @@ h2 { margin: 0; font-size: 16px; font-weight: 700; }
 .legend-line { width: 16px; height: 2px; border-radius: 2px; background: #5274df; }
 .chart-tooltip { position: absolute; z-index: 1; padding: 7px 9px; border: 1px solid #e5eaf3; border-radius: 6px; background: white; color: #52617a; font-size: 10px; box-shadow: 0 5px 16px rgb(27 43 75 / 10%); pointer-events: none; white-space: nowrap; }
 
+.forecast-panel { margin-top: 16px; padding: 20px 20px 5px; }
+.forecast-heading { padding-bottom: 16px; }
+.forecast-horizon { display: flex; align-items: center; gap: 9px; color: #8792a5; font-size: 9px; white-space: nowrap; }
+.forecast-horizon select { padding: 8px 9px; border: 1px solid #e6eaf1; border-radius: 7px; background: #fff; color: #65728a; font-size: 10px; }
+.forecast-horizon select:disabled { opacity: .55; }
+.forecast-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0 0 13px; }
+.forecast-stat { display: flex; min-height: 83px; flex-direction: column; gap: 5px; padding: 12px 13px; border: 1px solid #e9edf4; border-radius: 8px; background: #fbfcff; }
+.forecast-stat .eyebrow { margin-bottom: 1px; font-size: 7px; }
+.forecast-stat strong { color: #293851; font-size: 14px; font-weight: 700; }
+.forecast-stat small { color: #929daf; font-size: 8px; line-height: 1.4; }
+.forecast-note { margin: 0 0 13px; padding: 10px 12px; border: 1px solid #e8edf6; border-radius: 7px; background: #f8faff; color: #78859b; font-size: 9px; line-height: 1.55; }
+.forecast-empty { padding: 18px 10px 21px; border-top: 1px solid #f0f2f6; color: #9aa5b7; font-size: 10px; text-align: center; }
+.forecast-empty[hidden] { display: none; }
+.forecast-table th:nth-child(2), .forecast-table td:nth-child(2) { text-align: left; }
+.forecast-table th:nth-child(n+3), .forecast-table td:nth-child(n+3) { text-align: right; }
+.forecast-table th:first-child, .forecast-table td:first-child { width: 48px; }
+.forecast-table .forecast-change { color: #426aab; font-variant-numeric: tabular-nums; }
+
 .ranking-panel { margin-top: 16px; padding: 20px 20px 5px; }
 .ranking-heading { padding-bottom: 16px; }
 .search-box { display: flex; width: 170px; height: 34px; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid #e7ebf2; border-radius: 7px; color: #9aa4b4; }
@@ -365,11 +383,19 @@ td { padding: 10px 8px; border-top: 1px solid #f1f3f7; color: #53617a; font-size
   .metric-icon { width: 25px; height: 25px; }
   .metric-value { font-size: 22px; }
   .metric-note { font-size: 8px; }
-  .trend-panel, .ranking-panel { padding: 15px 13px 10px; }
+  .trend-panel, .forecast-panel, .ranking-panel { padding: 15px 13px 10px; }
   h2 { font-size: 14px; }
   .panel-subtitle { font-size: 9px; }
   .chart-wrap { height: 215px; margin-top: 12px; }
   .chart-legend { margin-left: 30px; }
+  .forecast-heading { align-items: flex-start; }
+  .forecast-horizon { align-items: flex-start; flex-direction: column; gap: 5px; font-size: 8px; }
+  .forecast-horizon select { padding: 7px; font-size: 9px; }
+  .forecast-summary { grid-template-columns: 1fr; gap: 7px; }
+  .forecast-stat { min-height: 68px; padding: 10px 11px; }
+  .forecast-stat strong { font-size: 13px; }
+  .forecast-table { min-width: 555px; }
+  .forecast-note { font-size: 8px; }
   .ranking-heading { align-items: flex-start; }
   .search-box { width: 128px; height: 32px; }
   th { padding: 10px 5px; font-size: 7px; letter-spacing: .3px; }

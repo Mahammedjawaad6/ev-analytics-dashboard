@@ -20,8 +20,33 @@ python -m http.server 8080 --directory web
 
 Then visit [http://localhost:8080](http://localhost:8080) and upload a CSV. The
 dashboard shows global EV car-stock trends, year-over-year growth, and the top
-10 countries in the latest historical year. CSV parsing, validation, charts,
-and ranking run client-side without a third-party JavaScript dependency.
+10 countries in the latest historical year, with a data-trained country stock
+forecast. CSV parsing, validation, charts, ranking, model training, validation,
+and prediction run client-side without a third-party JavaScript dependency.
+
+## Forecast model
+
+The forecast panel trains a short-term supervised model from the uploaded CSV;
+it does not call an external AI service or send data to a server. For each
+country with at least four eligible historical EV car-stock observations, it
+fits ordinary least-squares linear regression to the latest four observed
+stocks against calendar year. Projections are limited to one, two, or three
+years after the latest common country-stock year.
+
+Model selection uses rolling-origin validation on up to the latest three
+observations per country. It compares regression against a last-observation
+("persistence") baseline using weighted absolute percentage error (WAPE):
+`sum(abs(prediction - actual)) / sum(actual)`. The method with lower validation
+error generates the displayed forecasts. The panel reports both errors,
+validation coverage, the selected method, and forecast year. Projections are
+point estimates without confidence intervals and are not guarantees; new data,
+policy, supply, and market conditions may change future stock.
+
+For the available 49,375-row local example CSV, the rolling holdout contained
+117 predictions across 40 countries. The four-observation linear trend scored
+13.0% WAPE versus 24.2% for persistence on that particular snapshot. This is
+a historical validation result, not a promise of future accuracy; the model is
+retrained and re-evaluated independently for each uploaded file.
 
 ## GitHub Pages hosting
 

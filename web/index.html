@@ -33,6 +33,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 18.5 9 12l4 3 7.5-9"/><path d="M15.5 6H20v4.5"/></svg>
           Market trends
         </a>
+        <a class="nav-item" href="#ai-forecast">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5v3m0 11v3m8.5-8.5h-3m-11 0h-3m14.01-6.01-2.12 2.12m-7.78 7.78-2.12 2.12m12.02 0-2.12-2.12m-7.78-7.78L6.39 6.09"/><circle cx="12" cy="12" r="4.25"/></svg>
+          AI forecast
+        </a>
         <a class="nav-item" href="#country-ranking">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19.5h14M7.5 16V10m4.5 6V5m4.5 11v-4"/></svg>
           Country ranking
@@ -170,6 +174,67 @@
               <div id="chart-tooltip" class="chart-tooltip" hidden></div>
             </div>
             <div class="chart-legend"><span class="legend-line"></span> Global EV stock</div>
+          </section>
+
+          <section id="ai-forecast" class="panel forecast-panel" aria-labelledby="forecast-title">
+            <div class="panel-heading forecast-heading">
+              <div>
+                <p class="eyebrow">MACHINE-LEARNED OUTLOOK</p>
+                <h2 id="forecast-title">Country EV stock forecast</h2>
+                <p id="forecast-caption" class="panel-subtitle">Train a short-term forecast from your uploaded historical data.</p>
+              </div>
+              <label class="forecast-horizon">
+                <span>Forecast horizon</span>
+                <select id="forecast-horizon" disabled aria-label="Forecast horizon">
+                  <option value="1">1 year</option>
+                  <option value="2">2 years</option>
+                  <option value="3" selected>3 years</option>
+                </select>
+              </label>
+            </div>
+            <div class="forecast-summary" aria-live="polite">
+              <article class="forecast-stat">
+                <span class="eyebrow">SELECTED MODEL</span>
+                <strong id="forecast-model">Waiting for data</strong>
+                <small id="forecast-coverage">Country models will train after upload.</small>
+              </article>
+              <article class="forecast-stat">
+                <span class="eyebrow">ROLLING BACKTEST</span>
+                <strong id="forecast-wape">—</strong>
+                <small id="forecast-benchmark">Compared with a last-value baseline.</small>
+              </article>
+              <article class="forecast-stat">
+                <span class="eyebrow">PROJECTED YEAR</span>
+                <strong id="forecast-year">—</strong>
+                <small>Based on the latest eligible country year.</small>
+              </article>
+            </div>
+            <p class="forecast-note">
+              This is a short-term statistical ML forecast, not an external AI service.
+              Ordinary least-squares regression fits each country's last four observed
+              stock points. A rolling time-based backtest compares it with a
+              last-value baseline; the lower-error method is selected. Forecasts are
+              estimates without confidence intervals, not guarantees. The selected
+              CSV is analyzed only in this browser.
+            </p>
+            <div id="forecast-empty" class="forecast-empty">
+              Upload a CSV with at least four historical years for eligible countries
+              to train and evaluate the forecast.
+            </div>
+            <div class="table-scroll">
+              <table id="forecast-table" class="forecast-table" hidden>
+                <thead>
+                  <tr>
+                    <th scope="col">RANK</th>
+                    <th scope="col">COUNTRY</th>
+                    <th scope="col">LATEST STOCK</th>
+                    <th scope="col">FORECAST STOCK</th>
+                    <th scope="col">CHANGE</th>
+                  </tr>
+                </thead>
+                <tbody id="forecast-rows"></tbody>
+              </table>
+            </div>
           </section>
 
           <section id="country-ranking" class="panel ranking-panel">
