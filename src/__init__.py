@@ -1,0 +1,1 @@
+"""EV analytics application package."""

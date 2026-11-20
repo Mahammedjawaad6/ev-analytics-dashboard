@@ -1,0 +1,31 @@
+services:
+  ev-analytics:
+    build:
+      context: .
+    image: ev-analytics:local
+    environment:
+      EV_DATA_FILE: /data/ev-data.csv
+      EV_OUTPUT_DIR: /output
+    volumes:
+      - type: bind
+        source: ./EV data by country 2026.csv
+        target: /data/ev-data.csv
+        read_only: true
+      - type: bind
+        source: ./output
+        target: /output
+    restart: "no"
+  dashboard:
+    build:
+      context: .
+    image: ev-analytics:local
+    entrypoint:
+      - streamlit
+      - run
+      - dashboard.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.headless=true
+    ports:
+      - "8501:8501"
+    restart: unless-stopped

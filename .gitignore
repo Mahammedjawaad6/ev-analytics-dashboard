@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.venv/
+output/
+*.py[cod]
+EV data by country 2026.csv
+*.ipynb

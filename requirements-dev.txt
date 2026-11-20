@@ -1,0 +1,3 @@
+-r requirements.txt
+-r requirements-spark.txt
+pytest==8.3.5
