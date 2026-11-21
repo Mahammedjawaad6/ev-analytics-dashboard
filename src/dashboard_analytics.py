@@ -1,6 +1,7 @@
 """CSV validation and analytics used by the interactive dashboard."""
 
-from typing import BinaryIO, Tuple
+from pathlib import Path
+from typing import BinaryIO, Dict, Tuple
 
 import pandas as pd
 
@@ -58,6 +59,12 @@ def load_uploaded_csv(file: BinaryIO) -> pd.DataFrame:
         raise ValueError("The uploaded CSV has no data rows.")
     data["year"] = data["year"].astype("int64")
     return data
+
+
+def load_data_file(path: Path) -> pd.DataFrame:
+    """Load and validate the current contents of a local CSV file."""
+    with path.open("rb") as source:
+        return load_uploaded_csv(source)
 
 
 def build_dashboard_analytics(
@@ -118,3 +125,144 @@ def build_dashboard_analytics(
         top_countries["ev_stock"] / 1_000_000
     ).round(2)
     return growth.reset_index(drop=True), top_countries, latest_year
+
+
+def build_country_forecast(
+    data: pd.DataFrame, unit: str, horizon: int = 3
+) -> Tuple[pd.DataFrame, Dict[str, object]]:
+    """Train and validate the country-stock forecast on the supplied data."""
+    if not isinstance(horizon, int) or not 1 <= horizon <= 3:
+        raise ValueError("Forecast horizon must be between 1 and 3 years.")
+
+    eligible = data.loc[
+        (data["category"] == "Historical")
+        & (data["parameter"] == "EV stock")
+        & (data["mode"] == "Cars")
+        & (data["powertrain"] == "EV")
+        & (data["aggregate_group"] == "Other")
+        & (data["unit"] == unit)
+        & data["region_country"].notna()
+        & (data["region_country"] != "")
+    ]
+    stock = (
+        eligible.groupby(["region_country", "year"], as_index=False)["value"]
+        .sum()
+        .sort_values(["region_country", "year"])
+    )
+    series_by_country = {
+        country: list(zip(group["year"].astype(int), group["value"].astype(float)))
+        for country, group in stock.groupby("region_country")
+        if len(group) >= 4
+    }
+
+    empty_forecasts = pd.DataFrame(
+        columns=[
+            "country",
+            "current_year",
+            "current_stock",
+            "forecast_year",
+            "forecast_stock",
+            "change_pct",
+        ]
+    )
+    if not series_by_country:
+        return empty_forecasts, {
+            "model_name": "Not enough data",
+            "model_wape": None,
+            "baseline_wape": None,
+            "validation_samples": 0,
+            "validation_countries": 0,
+            "target_year": None,
+        }
+
+    latest_year = max(points[-1][0] for points in series_by_country.values())
+    current_series = {
+        country: points
+        for country, points in series_by_country.items()
+        if points[-1][0] == latest_year
+    }
+
+    def fit_linear_trend(points: list) -> Tuple[float, float]:
+        history = points[-4:]
+        mean_year = sum(year for year, _ in history) / len(history)
+        mean_value = sum(value for _, value in history) / len(history)
+        variance = sum((year - mean_year) ** 2 for year, _ in history)
+        slope = (
+            sum((year - mean_year) * (value - mean_value) for year, value in history)
+            / variance
+            if variance
+            else 0.0
+        )
+        return slope, mean_value - slope * mean_year
+
+    regression_errors = []
+    baseline_errors = []
+    actual_total = 0.0
+    validation_countries = 0
+    for points in current_series.values():
+        has_validation = False
+        first_validation = max(3, len(points) - 3)
+        for target_index in range(first_validation, len(points)):
+            training = points[:target_index]
+            year, actual = points[target_index]
+            slope, intercept = fit_linear_trend(training)
+            prediction = max(0.0, slope * year + intercept)
+            regression_errors.append(abs(prediction - actual))
+            baseline_errors.append(abs(training[-1][1] - actual))
+            actual_total += actual
+            has_validation = True
+        validation_countries += int(has_validation)
+
+    model_wape = (
+        sum(regression_errors) / actual_total
+        if regression_errors and actual_total > 0
+        else None
+    )
+    baseline_wape = (
+        sum(baseline_errors) / actual_total
+        if baseline_errors and actual_total > 0
+        else None
+    )
+    use_regression = model_wape is not None and (
+        baseline_wape is None or model_wape < baseline_wape
+    )
+
+    forecasts = []
+    for country, points in current_series.items():
+        current_year, current_stock = points[-1]
+        slope, intercept = fit_linear_trend(points)
+        forecast_year = current_year + horizon
+        forecast_stock = (
+            max(0.0, slope * forecast_year + intercept)
+            if use_regression
+            else current_stock
+        )
+        forecasts.append(
+            {
+                "country": country,
+                "current_year": current_year,
+                "current_stock": current_stock,
+                "forecast_year": forecast_year,
+                "forecast_stock": forecast_stock,
+                "change_pct": (
+                    (forecast_stock - current_stock) / current_stock * 100
+                    if current_stock > 0
+                    else None
+                ),
+            }
+        )
+    forecast_data = (
+        pd.DataFrame(forecasts)
+        .sort_values(["forecast_stock", "country"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+    return forecast_data, {
+        "model_name": (
+            "4-point linear regression" if use_regression else "Last-value baseline"
+        ),
+        "model_wape": model_wape,
+        "baseline_wape": baseline_wape,
+        "validation_samples": len(regression_errors),
+        "validation_countries": validation_countries,
+        "target_year": latest_year + horizon,
+    }

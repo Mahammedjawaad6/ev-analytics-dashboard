@@ -3,5 +3,5 @@ __pycache__/
 .venv/
 output/
 *.py[cod]
-EV data by country 2026.csv
+*.csv
 *.ipynb

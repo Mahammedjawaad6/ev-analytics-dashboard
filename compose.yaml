@@ -19,6 +19,13 @@ services:
     build:
       context: .
     image: ev-analytics:local
+    environment:
+      EV_DATA_FILE: /data/ev-data.csv
+    volumes:
+      - type: bind
+        source: ./EV data by country 2026.csv
+        target: /data/ev-data.csv
+        read_only: true
     entrypoint:
       - streamlit
       - run

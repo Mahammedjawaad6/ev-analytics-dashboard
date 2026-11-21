@@ -1,7 +1,19 @@
 import { buildForecast, getAnalytics, parseCsv } from "./data.mjs";
+import { fetchLiveCsv, normalizeLiveCsvUrl } from "./live-source.mjs";
 
 const CHART_COLOR = "#5274df";
-const state = { data: null, analytics: null, hoveredPoint: -1 };
+const LIVE_CONFIG_KEY = "ev-dashboard-live-source";
+const REFRESH_INTERVALS = new Set([30, 60, 300]);
+const state = {
+  data: null,
+  analytics: null,
+  hoveredPoint: -1,
+  liveUrl: null,
+  liveTimer: null,
+  liveRequest: null,
+  liveGeneration: 0,
+  liveSettingsPersistenceFailed: false,
+};
 
 const elements = {
   file: document.querySelector("#csv-file"),
@@ -24,6 +36,11 @@ const elements = {
   chart: document.querySelector("#trend-chart"),
   chartEmpty: document.querySelector("#trend-empty"),
   chartTooltip: document.querySelector("#chart-tooltip"),
+  liveUrl: document.querySelector("#live-csv-url"),
+  liveRefresh: document.querySelector("#live-refresh-interval"),
+  liveConnect: document.querySelector("#live-connect"),
+  liveStop: document.querySelector("#live-stop"),
+  liveStatus: document.querySelector("#live-source-status"),
   forecastHorizon: document.querySelector("#forecast-horizon"),
   forecastCaption: document.querySelector("#forecast-caption"),
   forecastModel: document.querySelector("#forecast-model"),
@@ -318,13 +335,15 @@ function renderForecast() {
   }
 }
 
-function activateData(file, data) {
+function activateData(file, data, sourceType = "upload") {
   state.data = data;
   state.analytics = getAnalytics(data);
   elements.error.hidden = true;
   elements.status.classList.add("is-loaded");
-  elements.datasetName.textContent = file.name;
-  elements.datasetUpdated.textContent = `${data.length.toLocaleString()} rows · just now`;
+  elements.datasetName.textContent =
+    sourceType === "live" ? `Live · ${file.name}` : file.name;
+  elements.datasetUpdated.textContent =
+    `${data.length.toLocaleString()} rows · updated ${new Date().toLocaleTimeString()}`;
   elements.uploadButtonLabel.textContent = "Replace dataset";
 
   elements.unit.replaceChildren();
@@ -357,9 +376,127 @@ async function handleFile(file) {
   try {
     const data = parseCsv(await file.text());
     activateData(file, data);
+    stopLiveUpdates("Live updates stopped because a file was selected.");
   } catch (error) {
     elements.error.textContent = error instanceof Error ? error.message : "Could not read this CSV.";
     elements.error.hidden = false;
+  }
+}
+
+function stopLiveUpdates(message = "Live updates stopped.") {
+  state.liveGeneration += 1;
+  if (state.liveTimer !== null) window.clearInterval(state.liveTimer);
+  state.liveTimer = null;
+  if (state.liveRequest) state.liveRequest.abort();
+  state.liveRequest = null;
+  state.liveUrl = null;
+  state.liveSettingsPersistenceFailed = false;
+  elements.liveConnect.disabled = false;
+  elements.liveStop.disabled = true;
+  elements.liveStatus.classList.remove("is-connected");
+  elements.liveStatus.textContent = message;
+  try {
+    localStorage.removeItem(LIVE_CONFIG_KEY);
+  } catch (error) {
+    elements.liveStatus.textContent += " Settings could not be cleared from this browser.";
+  }
+}
+
+async function refreshLiveSource(generation) {
+  if (generation !== state.liveGeneration || state.liveRequest) return;
+  const controller = new AbortController();
+  state.liveRequest = controller;
+  try {
+    const data = await fetchLiveCsv(state.liveUrl, (url, options) =>
+      fetch(url, { ...options, signal: controller.signal }),
+    );
+    if (generation !== state.liveGeneration) return;
+    const sourceUrl = new URL(state.liveUrl);
+    const fileName = sourceUrl.pathname.split("/").filter(Boolean).pop() || sourceUrl.host;
+    activateData({ name: fileName }, data, "live");
+    elements.liveStatus.classList.add("is-connected");
+    elements.liveStatus.textContent =
+      `Connected · refreshed ${new Date().toLocaleTimeString()} · ` +
+      `next check in ${Number(elements.liveRefresh.value)} seconds.` +
+      (state.liveSettingsPersistenceFailed
+        ? " Settings will not be remembered in this browser."
+        : "");
+  } catch (error) {
+    if (
+      generation !== state.liveGeneration ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      return;
+    }
+    const message = error instanceof Error ? error.message : "The CSV could not be fetched.";
+    elements.liveStatus.classList.remove("is-connected");
+    elements.liveStatus.textContent = `Live refresh failed; retrying automatically. ${message}`;
+    elements.error.textContent = state.data
+      ? `Showing the last successful data. ${message}`
+      : message;
+    elements.error.hidden = false;
+  } finally {
+    if (state.liveRequest === controller) state.liveRequest = null;
+  }
+}
+
+async function startLiveUpdates(value = elements.liveUrl.value) {
+  let url;
+  const refreshSeconds = Number(elements.liveRefresh.value);
+  try {
+    url = normalizeLiveCsvUrl(value);
+    if (!REFRESH_INTERVALS.has(refreshSeconds)) {
+      throw new Error("Choose a refresh interval of 30 seconds, 1 minute, or 5 minutes.");
+    }
+  } catch (error) {
+    elements.liveStatus.classList.remove("is-connected");
+    elements.liveStatus.textContent =
+      error instanceof Error ? error.message : "Could not configure live updates.";
+    return;
+  }
+
+  stopLiveUpdates("Connecting to the live CSV...");
+  state.liveUrl = url;
+  elements.liveUrl.value = url;
+  elements.liveStop.disabled = false;
+  elements.liveConnect.disabled = true;
+  state.liveSettingsPersistenceFailed = false;
+  const generation = state.liveGeneration;
+  try {
+    localStorage.setItem(
+      LIVE_CONFIG_KEY,
+      JSON.stringify({ url, refreshSeconds }),
+    );
+  } catch (error) {
+    state.liveSettingsPersistenceFailed = true;
+    elements.liveStatus.textContent =
+      "Connected for this visit; browser storage is unavailable, so settings will not be remembered.";
+  }
+  state.liveTimer = window.setInterval(
+    () => void refreshLiveSource(generation),
+    refreshSeconds * 1000,
+  );
+  await refreshLiveSource(generation);
+  if (generation === state.liveGeneration) elements.liveConnect.disabled = false;
+}
+
+function restoreLiveSettings() {
+  let saved;
+  try {
+    const value = localStorage.getItem(LIVE_CONFIG_KEY);
+    if (!value) return;
+    saved = JSON.parse(value);
+    const url = normalizeLiveCsvUrl(saved.url);
+    const refreshSeconds = Number(saved.refreshSeconds);
+    if (!REFRESH_INTERVALS.has(refreshSeconds)) {
+      throw new Error("Saved live refresh interval is not supported.");
+    }
+    elements.liveUrl.value = url;
+    elements.liveRefresh.value = String(refreshSeconds);
+    void startLiveUpdates(url);
+  } catch (error) {
+    elements.liveStatus.textContent =
+      error instanceof Error ? error.message : "Saved live settings could not be read.";
   }
 }
 
@@ -378,6 +515,15 @@ elements.forecastHorizon.addEventListener("change", () => {
 });
 elements.search.addEventListener("input", () => {
   if (state.analytics) renderCountryRows();
+});
+elements.liveConnect.addEventListener("click", () => {
+  void startLiveUpdates();
+});
+elements.liveStop.addEventListener("click", () => {
+  stopLiveUpdates("Live updates stopped. The last loaded data remains visible.");
+});
+elements.liveRefresh.addEventListener("change", () => {
+  if (state.liveUrl) void startLiveUpdates(state.liveUrl);
 });
 
 for (const eventName of ["dragenter", "dragover"]) {
@@ -428,3 +574,10 @@ if ("ResizeObserver" in window) {
     if (state.data) drawChart();
   });
 }
+
+restoreLiveSettings();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.liveUrl) {
+    void refreshLiveSource(state.liveGeneration);
+  }
+});

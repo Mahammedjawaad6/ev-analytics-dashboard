@@ -2,12 +2,12 @@
 
 A browser-based EV market dashboard and optional PySpark batch pipeline.
 The static website works on GitHub Pages and renders charts from a CSV selected
-by the visitor. The CSV is parsed and analyzed in the browser; it is not sent to
-a server, stored in the repository, or kept after the page is closed.
+by the visitor, or optionally fetched from a public live CSV URL. CSV data is
+parsed and analyzed in the browser; uploaded files are not sent to a server.
 
-The dashboard updates immediately when a new CSV is selected. It does not poll
-an external data provider, so its figures are only as current as the uploaded
-file. No source dataset is included in this repository.
+The dashboard updates immediately when a new CSV is selected and can poll a
+configured external CSV source while the page is open. No source dataset is
+included in this repository.
 
 ## Dashboard preview
 
@@ -23,6 +23,22 @@ dashboard shows global EV car-stock trends, year-over-year growth, and the top
 10 countries in the latest historical year, with a data-trained country stock
 forecast. CSV parsing, validation, charts, ranking, model training, validation,
 and prediction run client-side without a third-party JavaScript dependency.
+
+### Automatic updates on GitHub Pages
+
+The hosted dashboard is static and cannot see files on your computer. To enable
+automatic updates, enter a public HTTPS CSV URL in the **Hosted live data**
+section and select a refresh interval. The browser fetches that CSV directly,
+then re-runs analytics and the forecast; the URL setting is saved in that
+browser and can be stopped at any time. The CSV must use the required columns
+listed below. Its server must allow cross-origin browser requests (CORS), and
+the URL must not contain credentials or secrets. If CORS is not available, the
+source owner must enable it or provide a public endpoint that does.
+
+GitHub Pages does not provide a data API or keep a server running, so an online
+data source is still required. Updating a repository file alone does not make
+the hosted dashboard poll it; configure that file's public raw URL as the live
+source. Updates run only while the dashboard page is open.
 
 ## Forecast model
 
@@ -95,21 +111,30 @@ docker compose up --build dashboard
 
 The dashboard port is published on `127.0.0.1` only. Open
 [http://localhost:8501](http://localhost:8501) on the Docker host and upload the
-CSV. The Streamlit process listens on the container interface so Docker can
-forward the loopback-only host port; do not broaden the host binding unless you
-add an appropriate authenticated access layer.
+CSV, or update the mounted `EV data by country 2026.csv` file in the project
+folder. While the dashboard is open, it checks that file every 10 seconds and
+recalculates the analytics and forecast from its latest contents. The file is
+mounted read-only in the container; edit it on the host. An uploaded file takes
+precedence until it is cleared. GitHub Pages remains static and cannot monitor a
+local file; there, select the updated CSV again to refresh the analysis.
+
+The Streamlit process listens on the container interface so Docker can forward
+the loopback-only host port; do not broaden the host binding unless you add an
+appropriate authenticated access layer.
 
 ## Security
 
-- The static dashboard parses uploads in the browser and does not send files to
-  an application server. Avoid uploading data that should not be processed on
-  the current device.
+- The dashboard parses uploaded CSV files in the browser and does not upload
+  them. A configured live CSV is fetched directly from its public URL; never put
+  credentials or private data in that URL.
 - The optional local Streamlit service is unauthenticated and is therefore
   bound to host loopback only by Docker Compose.
-- The example CSV, project notebook, and generated outputs are excluded from
-  Git and Docker build contexts.
-- A regression test checks the loopback-only published port and the
-  source-data ignore rules:
+- All CSV files, the project notebook, and generated outputs are excluded from
+  Git and Docker build contexts. The Compose batch service can still bind-mount
+  a local CSV at runtime without including it in the image build context.
+- The CI workflow explicitly grants read-only repository-content permission.
+- Regression tests check the loopback-only published port, source-data ignore
+  rules, and CI permission scope:
 
 ```powershell
 python -m pytest -v tests/test_compose_security.py

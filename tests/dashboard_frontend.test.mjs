@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildForecast, getAnalytics, parseCsv } from "../web/data.mjs";
+import { fetchLiveCsv, normalizeLiveCsvUrl } from "../web/live-source.mjs";
 
 const HEADER =
   "\uFEFFregion_country,category,parameter,mode,powertrain,year,unit,value,Aggregate group";
@@ -146,5 +147,50 @@ test("does not forecast short country series and rejects unsupported horizons", 
   assert.throws(
     () => buildForecast(data, "Vehicles", 4),
     /between 1 and 3 years/,
+  );
+});
+
+test("validates public HTTPS live CSV URLs", () => {
+  assert.equal(
+    normalizeLiveCsvUrl(" https://data.example.org/ev.csv "),
+    "https://data.example.org/ev.csv",
+  );
+  assert.throws(() => normalizeLiveCsvUrl("http://data.example.org/ev.csv"), /HTTPS/);
+  assert.throws(
+    () => normalizeLiveCsvUrl("https://user:password@data.example.org/ev.csv"),
+    /credentials/,
+  );
+  assert.throws(() => normalizeLiveCsvUrl("not a URL"), /valid public HTTPS CSV URL/);
+});
+
+test("fetches and parses a live CSV without caching", async () => {
+  let requestedUrl;
+  let requestedOptions;
+  const csv = `${HEADER}\nAlpha,Historical,EV stock,Cars,EV,2024,Vehicles,12,Other`;
+  const data = await fetchLiveCsv("https://data.example.org/ev.csv", async (url, options) => {
+    requestedUrl = url;
+    requestedOptions = options;
+    return { ok: true, text: async () => csv };
+  });
+
+  assert.equal(requestedUrl, "https://data.example.org/ev.csv");
+  assert.equal(requestedOptions.cache, "no-store");
+  assert.equal(data[0].region_country, "Alpha");
+  assert.equal(data[0].year, 2024);
+});
+
+test("reports live-source HTTP and network errors clearly", async () => {
+  await assert.rejects(
+    fetchLiveCsv("https://data.example.org/ev.csv", async () => ({
+      ok: false,
+      status: 503,
+    })),
+    /HTTP 503/,
+  );
+  await assert.rejects(
+    fetchLiveCsv("https://data.example.org/ev.csv", async () => {
+      throw new TypeError("fetch failed");
+    }),
+    /cross-origin \(CORS\)/,
   );
 });

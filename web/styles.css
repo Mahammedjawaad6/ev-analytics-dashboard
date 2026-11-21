@@ -244,6 +244,34 @@ h1 { margin-bottom: 6px; font-size: clamp(24px, 3vw, 29px); font-weight: 700; }
 .upload-format { display: flex; align-items: center; gap: 8px; margin-left: auto; color: #8a96aa; font-size: 10px; }
 .format-icon { padding: 6px 7px; border-radius: 5px; background: #edf1fa; color: #6d7da2; font-size: 8px; font-weight: 800; letter-spacing: .5px; }
 
+.live-source-panel {
+  margin-top: 12px;
+  padding: 13px 15px 10px;
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  background: #fff;
+}
+.live-source-heading .eyebrow { margin-bottom: 4px; font-size: 8px; }
+.live-source-heading > p:last-child { margin-bottom: 10px; color: #78859b; font-size: 10px; }
+.live-source-controls { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto auto; align-items: end; gap: 9px; }
+.live-url-label, .live-interval-label { display: flex; flex-direction: column; gap: 5px; color: #738097; font-size: 9px; font-weight: 600; }
+.live-url-label input, .live-interval-label select {
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid #e3e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #53617a;
+  font-size: 10px;
+  outline: none;
+}
+.live-url-label input:focus, .live-interval-label select:focus { border-color: #9eafe0; box-shadow: 0 0 0 3px #edf2ff; }
+.live-action { min-height: 34px; padding: 0 12px; border: 1px solid #dfe6f3; border-radius: 7px; background: #fff; color: #53617a; cursor: pointer; font-size: 10px; font-weight: 700; }
+.live-action.primary { border-color: #4169e1; background: #4169e1; color: #fff; }
+.live-action:disabled { cursor: not-allowed; opacity: .5; }
+.live-source-status { margin: 8px 0 0; color: #9aa4b4; font-size: 9px; line-height: 1.5; }
+.live-source-status.is-connected { color: #398365; }
+
 .error-message {
   margin-top: 9px;
   padding: 10px 12px;
@@ -375,6 +403,10 @@ td { padding: 10px 8px; border-top: 1px solid #f1f3f7; color: #53617a; font-size
   .upload-copy strong { font-size: 10px; }
   .upload-copy span { font-size: 9px; }
   .upload-copy small { font-size: 8px; }
+  .live-source-panel { padding: 12px; }
+  .live-source-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .live-url-label { grid-column: 1 / -1; }
+  .live-action { width: 100%; }
   .dataset-status { font-size: 9px; }
   #dataset-updated { font-size: 8px; }
   .metrics-grid { gap: 9px; margin-bottom: 12px; }
